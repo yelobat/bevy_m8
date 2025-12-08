@@ -1,0 +1,11 @@
+[package]
+name = "bevy_dirtywave_m8"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serialport = { workspace = true }
+bevy = { workspace = true, features = [
+     "bevy_log"
+]}
+async-channel = { workspace = true }
