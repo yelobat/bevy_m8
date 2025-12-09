@@ -3,11 +3,7 @@
 use async_channel::{Receiver, Sender};
 use bevy::prelude::*;
 use serialport::{SerialPort, SerialPortType};
-use std::{
-    sync::{Arc, Mutex, atomic::AtomicBool},
-    thread,
-    time::Duration,
-};
+use std::{sync::Mutex, time::Duration};
 
 use crate::command::M8Command;
 
@@ -24,12 +20,6 @@ const SERIAL_TIMEOUT_MS: Duration = Duration::from_millis(5);
 const M8_VID: u16 = 0x16C0;
 const M8_PID: u16 = 0x048A;
 const BAUD_RATE: u32 = 115_200;
-
-// SLIP Protocol Constants
-const SLIP_END: u8 = 0xC0;
-const SLIP_ESC: u8 = 0xDB;
-const SLIP_ESC_END: u8 = 0xDC;
-const SLIP_ESC_ESC: u8 = 0xDD;
 
 /// Represents the connection to the M8.
 #[derive(Resource)]
@@ -58,8 +48,14 @@ pub struct M8SerialPlugin {
 
 impl Plugin for M8SerialPlugin {
     fn build(&self, app: &mut App) {
-        let connection =
+        let mut connection =
             M8Connection::open(self.preferred_device.clone()).expect("Failed to connect to the M8");
+
+        connection
+            .send_enable_command()
+            .expect("Failed to send the enable command!");
+        connection.read().expect("Failed to read from the M8!");
+
         app.insert_resource(connection);
     }
 }
@@ -76,11 +72,11 @@ impl M8Connection {
     }
 
     fn send_enable_command(&mut self) -> Result<usize, M8ConnectionError> {
-        Ok(self.send(&[b'E'])?)
+        self.send(b"E")
     }
 
     fn send_reset_command(&mut self) -> Result<usize, M8ConnectionError> {
-        Ok(self.send(&[b'R'])?)
+        self.send(b"R")
     }
 
     pub fn read(&mut self) -> Result<(), M8ConnectionError> {
@@ -106,7 +102,7 @@ impl M8Connection {
 
         Ok(Self {
             port: Mutex::new(port),
-            buffer: [0; 1024],
+            buffer: [0; SERIAL_READ_SIZE],
         })
     }
 
@@ -114,17 +110,18 @@ impl M8Connection {
         let ports = serialport::available_ports()
             .map_err(|e| M8ConnectionError::SerialPort(e.to_string()))?;
 
-        if let Some(pref) = preferred {
-            if ports.iter().any(|p| p.port_name == pref) {
-                return Ok(pref.to_string());
-            }
+        if let Some(pref) = preferred
+            && ports.iter().any(|p| p.port_name == pref)
+        {
+            return Ok(pref.to_string());
         }
 
         for port in ports {
-            if let SerialPortType::UsbPort(info) = port.port_type {
-                if info.vid == M8_VID && info.pid == M8_PID {
-                    return Ok(port.port_name);
-                }
+            if let SerialPortType::UsbPort(info) = port.port_type
+                && info.vid == M8_VID
+                && info.pid == M8_PID
+            {
+                return Ok(port.port_name);
             }
         }
 
