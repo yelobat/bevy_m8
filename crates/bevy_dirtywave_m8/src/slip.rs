@@ -1,10 +1,10 @@
 //! Slip Implementation based on: <https://github.com/laamaa/m8c/src/backends/slip.c>
 
 // SLIP Protocol Constants
-const SLIP_END: u8 = 0xC0;
-const SLIP_ESC: u8 = 0xDB;
-const SLIP_ESC_END: u8 = 0xDC;
-const SLIP_ESC_ESC: u8 = 0xDD;
+pub const SLIP_END: u8 = 0xC0;
+pub const SLIP_ESC: u8 = 0xDB;
+pub const SLIP_ESC_END: u8 = 0xDC;
+pub const SLIP_ESC_ESC: u8 = 0xDD;
 
 /// Errors that can occur during SLIP decoding.
 #[derive(Debug, Clone, PartialEq)]
