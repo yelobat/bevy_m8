@@ -3,18 +3,12 @@
 use async_channel::{Receiver, Sender};
 use bevy::prelude::*;
 use serialport::{SerialPort, SerialPortType};
-use std::{sync::Mutex, thread::sleep, time::Duration};
+use std::sync::Mutex;
 
-use crate::command::M8Command;
+use crate::{DirtywaveM8UpdateSystems, command::M8Command};
 
 /// The maximum amount of bytes to read from the serial device in one pass.
 const SERIAL_READ_SIZE: usize = 1024;
-
-/// The delay between subsequent reads (measured in milliseconds).
-const SERIAL_READ_DELAY_MS: usize = 4;
-
-/// The timeout for reading and writing the M8 serial connection.
-const SERIAL_TIMEOUT_MS: Duration = Duration::from_millis(5);
 
 // M8 Constants
 const M8_VID: u16 = 0x16C0;
@@ -25,6 +19,7 @@ const BAUD_RATE: u32 = 115_200;
 #[derive(Resource)]
 struct M8Connection {
     port: Mutex<Box<dyn SerialPort>>,
+    size: usize,
     buffer: [u8; 1024],
 }
 
@@ -41,6 +36,17 @@ enum M8ConnectionError {
     SerialPort(String),
 }
 
+fn read(mut connection: ResMut<M8Connection>) {
+    match connection.read() {
+        Ok(size) => info!(
+            "M8 Serial Buffer: {:?} has size: {:?}",
+            connection.buffer,
+            connection.size
+        ),
+        Err(err) => warn!("M8 Serial Error: {:?}", err),
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct M8SerialPlugin {
     pub preferred_device: Option<String>,
@@ -48,18 +54,10 @@ pub struct M8SerialPlugin {
 
 impl Plugin for M8SerialPlugin {
     fn build(&self, app: &mut App) {
-        let mut connection =
+        let connection =
             M8Connection::open(self.preferred_device.clone()).expect("Failed to connect to the M8");
-
-        sleep(Duration::from_millis(500));
-
-        connection
-            .send_enable_command()
-            .expect("Failed to send the enable command!");
-        connection.read().expect("Failed to read from the M8!");
-        println!("{:?}", connection.buffer);
-
         app.insert_resource(connection);
+        app.add_systems(Update, read.in_set(DirtywaveM8UpdateSystems::SerialRead));
     }
 }
 
@@ -82,12 +80,13 @@ impl M8Connection {
         self.send(b"R")
     }
 
-    pub fn read(&mut self) -> Result<(), M8ConnectionError> {
+    pub fn read(&mut self) -> Result<usize, M8ConnectionError> {
         self.buffer.fill(0);
         if let Ok(mut port) = self.port.lock() {
-            Ok(port
-                .read_exact(&mut self.buffer)
-                .map_err(|e| M8ConnectionError::Io(e.to_string()))?)
+            self.size = port
+                .read(&mut self.buffer)
+                .map_err(|e| M8ConnectionError::Io(e.to_string()))?;
+            Ok(self.size)
         } else {
             Err(M8ConnectionError::Io("SerialPort busy".into()))
         }
@@ -99,13 +98,13 @@ impl M8Connection {
         info!("Opening M8 Serial Port at {}", port_name);
 
         let port = serialport::new(port_name, BAUD_RATE)
-            .timeout(SERIAL_TIMEOUT_MS)
             .open()
             .map_err(|e| M8ConnectionError::SerialPort(e.to_string()))?;
 
         Ok(Self {
             port: Mutex::new(port),
             buffer: [0; SERIAL_READ_SIZE],
+            size: 0,
         })
     }
 
