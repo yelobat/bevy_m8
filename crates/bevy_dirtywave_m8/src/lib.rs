@@ -1,8 +1,9 @@
 //! Dirtywave M8 accessible from within a bevy app.
 
 mod command;
-mod serialport;
+mod serial;
 mod slip;
+mod display;
 
 use bevy::prelude::*;
 
@@ -11,6 +12,8 @@ use bevy::prelude::*;
 enum DirtywaveM8UpdateSystems {
     Input,
     SerialRead,
+    SlipDecode,
+    CommandDecode,
     DisplayRender,
     Update,
 }
@@ -28,15 +31,22 @@ impl Plugin for DirtywaveM8Plugin {
             (
                 DirtywaveM8UpdateSystems::Input,
                 DirtywaveM8UpdateSystems::SerialRead,
+                DirtywaveM8UpdateSystems::SlipDecode,
+                DirtywaveM8UpdateSystems::CommandDecode,
                 DirtywaveM8UpdateSystems::DisplayRender,
                 DirtywaveM8UpdateSystems::Update,
             ),
         );
 
         // Add the Serial Interaction Plugin.
-        app.add_plugins(serialport::M8SerialPlugin {
-            preferred_device: self.0.clone().into(),
-        });
+        app.add_plugins((
+            serial::M8SerialPlugin {
+                preferred_device: self.0.clone().into(),
+            },
+            slip::M8SlipDecoderPlugin,
+            command::M8CommandDecoderPlugin,
+            display::M8DisplayPlugin,
+        ));
     }
 }
 

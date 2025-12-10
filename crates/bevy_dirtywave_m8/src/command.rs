@@ -1,5 +1,6 @@
 //! Commands issued from the M8 firmware.
 
+use bevy::prelude::*;
 use crate::slip;
 
 // M8 Command Constants
@@ -150,7 +151,7 @@ impl M8Command {
                         },
                         colour: current_colour.clone(),
                     })
-                },
+                }
                 9 => Ok(M8Command::DrawRectangle {
                     pos: Position {
                         x: u16::from_le_bytes([buf[1], buf[2]]),
@@ -179,7 +180,7 @@ impl M8Command {
                         },
                         colour: current_colour.clone(),
                     })
-                },
+                }
                 _ => Err(M8CommandError::InvalidCommand),
             },
             SYSTEM_INFO_COMMAND => Ok(M8Command::SystemInfo {
@@ -195,6 +196,7 @@ impl M8Command {
 }
 
 /// The M8 command decoder.
+#[derive(Debug, Resource)]
 pub struct M8CommandDecoder {
     // This is the last used colour used during drawing.
     current_colour: Colour,
@@ -222,6 +224,13 @@ impl M8CommandDecoder {
                 self.commands.push(command);
                 Ok(())
             })
+    }
+}
+
+pub struct M8CommandDecoderPlugin;
+impl Plugin for M8CommandDecoderPlugin {
+    fn build(&self, app: &mut App) {
+        app.insert_resource(M8CommandDecoder::new());
     }
 }
 
@@ -266,7 +275,12 @@ fn decode_test() {
 
     let character = decoder.commands.get(1).unwrap();
     match &character {
-        M8Command::DrawCharacter { c, pos, foreground, background } => {
+        M8Command::DrawCharacter {
+            c,
+            pos,
+            foreground,
+            background,
+        } => {
             assert_eq!(c, &65);
             assert_eq!(pos.x, 20);
             assert_eq!(pos.y, 40);
@@ -276,8 +290,8 @@ fn decode_test() {
             assert_eq!(background.r, 255);
             assert_eq!(background.g, 254);
             assert_eq!(background.b, 253);
-        },
-        _ => panic!()
+        }
+        _ => panic!(),
     }
 }
 

@@ -1,5 +1,7 @@
 //! Slip Implementation based on: <https://github.com/laamaa/m8c/src/backends/slip.c>
 
+use bevy::prelude::*;
+
 // SLIP Protocol Constants
 pub const SLIP_END: u8 = 0xC0;
 pub const SLIP_ESC: u8 = 0xDB;
@@ -22,7 +24,7 @@ enum State {
 }
 
 /// SLIP Decoder.
-#[derive(Debug)]
+#[derive(Resource, Debug)]
 pub struct SlipDecoder {
     buffer: Vec<u8>,
     capacity: usize,
@@ -95,6 +97,13 @@ impl SlipDecoder {
                 }
             },
         }
+    }
+}
+
+pub struct M8SlipDecoderPlugin;
+impl Plugin for M8SlipDecoderPlugin {
+    fn build(&self, app: &mut App) {
+        app.insert_resource(SlipDecoder::new(1024));
     }
 }
 

@@ -6,6 +6,20 @@ edition = "2024"
 [dependencies]
 serialport = { workspace = true }
 bevy = { workspace = true, features = [
-     "bevy_log"
+     # Required Features
+     "bevy_window",
+     "bevy_winit",
+     "bevy_render",
+     "bevy_camera",
+
+     # Platform Features
+     "wayland",
+     "x11",
+
+     # Extra Features
+     "multi_threaded",
+
+     # Debugging
+     "bevy_log",
 ]}
 async-channel = { workspace = true }

@@ -3,7 +3,7 @@
 use async_channel::{Receiver, Sender};
 use bevy::prelude::*;
 use serialport::{SerialPort, SerialPortType};
-use std::{sync::Mutex, time::Duration};
+use std::{sync::Mutex, thread::sleep, time::Duration};
 
 use crate::command::M8Command;
 
@@ -51,10 +51,13 @@ impl Plugin for M8SerialPlugin {
         let mut connection =
             M8Connection::open(self.preferred_device.clone()).expect("Failed to connect to the M8");
 
+        sleep(Duration::from_millis(500));
+
         connection
             .send_enable_command()
             .expect("Failed to send the enable command!");
         connection.read().expect("Failed to read from the M8!");
+        println!("{:?}", connection.buffer);
 
         app.insert_resource(connection);
     }
