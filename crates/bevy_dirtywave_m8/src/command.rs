@@ -75,6 +75,7 @@ pub enum M8Command {
 }
 
 impl M8Command {
+    /// From a byte slice, and the current set colour.
     fn from_bytes_with_context(
         buf: &[u8],
         current_colour: &mut Colour,
@@ -132,21 +133,24 @@ impl M8Command {
                     },
                     colour: current_colour.clone(),
                 }),
-                8 => Ok(M8Command::DrawRectangle {
-                    pos: Position {
-                        x: u16::from_le_bytes([buf[1], buf[2]]),
-                        y: u16::from_le_bytes([buf[3], buf[4]]),
-                    },
-                    size: Size {
-                        width: 1,
-                        height: 1,
-                    },
-                    colour: Colour {
+                8 => {
+                    *current_colour = Colour {
                         r: buf[5],
                         g: buf[6],
                         b: buf[7],
-                    },
-                }),
+                    };
+                    Ok(M8Command::DrawRectangle {
+                        pos: Position {
+                            x: u16::from_le_bytes([buf[1], buf[2]]),
+                            y: u16::from_le_bytes([buf[3], buf[4]]),
+                        },
+                        size: Size {
+                            width: 1,
+                            height: 1,
+                        },
+                        colour: current_colour.clone(),
+                    })
+                },
                 9 => Ok(M8Command::DrawRectangle {
                     pos: Position {
                         x: u16::from_le_bytes([buf[1], buf[2]]),
@@ -158,21 +162,24 @@ impl M8Command {
                     },
                     colour: current_colour.clone(),
                 }),
-                12 => Ok(M8Command::DrawRectangle {
-                    pos: Position {
-                        x: u16::from_le_bytes([buf[1], buf[2]]),
-                        y: u16::from_le_bytes([buf[3], buf[4]]),
-                    },
-                    size: Size {
-                        width: u16::from_le_bytes([buf[5], buf[6]]),
-                        height: u16::from_le_bytes([buf[7], buf[8]]),
-                    },
-                    colour: Colour {
+                12 => {
+                    *current_colour = Colour {
                         r: buf[5],
                         g: buf[6],
                         b: buf[7],
-                    },
-                }),
+                    };
+                    Ok(M8Command::DrawRectangle {
+                        pos: Position {
+                            x: u16::from_le_bytes([buf[1], buf[2]]),
+                            y: u16::from_le_bytes([buf[3], buf[4]]),
+                        },
+                        size: Size {
+                            width: u16::from_le_bytes([buf[5], buf[6]]),
+                            height: u16::from_le_bytes([buf[7], buf[8]]),
+                        },
+                        colour: current_colour.clone(),
+                    })
+                },
                 _ => Err(M8CommandError::InvalidCommand),
             },
             SYSTEM_INFO_COMMAND => Ok(M8Command::SystemInfo {
@@ -187,6 +194,7 @@ impl M8Command {
     }
 }
 
+/// The M8 command decoder.
 pub struct M8CommandDecoder {
     // This is the last used colour used during drawing.
     current_colour: Colour,
@@ -196,6 +204,7 @@ pub struct M8CommandDecoder {
 }
 
 impl M8CommandDecoder {
+    /// Create a new M8 Command Decoder.
     pub fn new() -> Self {
         Self {
             current_colour: Colour { r: 0, g: 0, b: 0 },
@@ -203,7 +212,7 @@ impl M8CommandDecoder {
         }
     }
 
-    /// processes commands that have been slip decoded.
+    /// Processes commands that have been slip decoded.
     pub fn process(&mut self, buf: &[u8]) -> Result<(), M8CommandError> {
         self.commands.clear();
         buf.split(|&byte| byte == slip::SLIP_END)
