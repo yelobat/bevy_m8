@@ -1,7 +1,10 @@
 //! Commands issued from the M8 firmware.
 
+use crate::{
+    DirtywaveM8UpdateSystems,
+    slip::{self, SlipDecoder},
+};
 use bevy::prelude::*;
-use crate::slip;
 
 // M8 Command Constants
 #[allow(dead_code)]
@@ -25,14 +28,6 @@ pub struct Size {
     pub height: u16,
 }
 
-/// Specifies the colour of the set of drawn pixels.
-#[derive(Debug, Clone)]
-pub struct Colour {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum M8CommandError {
     InvalidCommand,
@@ -51,19 +46,19 @@ pub enum M8Command {
     DrawRectangle {
         pos: Position,
         size: Size,
-        colour: Colour,
+        colour: Color,
     },
 
     /// A character draw command
     DrawCharacter {
         c: u8,
         pos: Position,
-        foreground: Colour,
-        background: Colour,
+        foreground: Color,
+        background: Color,
     },
 
     /// An oscilloscope waveform draw command
-    DrawOscilloscopeWaveform { colour: Colour, waveform: Vec<u8> },
+    DrawOscilloscopeWaveform { colour: Color, waveform: Vec<u8> },
 
     /// System Info command
     SystemInfo {
@@ -75,12 +70,37 @@ pub enum M8Command {
     },
 }
 
+#[inline]
+fn u8_slice_to_color(slice: &[u8]) -> Color {
+    let red: f32 = (slice[0] as f32) / 255.0;
+    let green: f32 = (slice[1] as f32) / 255.0;
+    let blue: f32 = (slice[2] as f32) / 255.0;
+    let alpha: f32 = 1.0;
+    Color::Srgba(Srgba {
+        red,
+        green,
+        blue,
+        alpha,
+    })
+}
+
+fn command_decode(slip: Res<SlipDecoder>, mut decoder: ResMut<M8CommandDecoder>) {
+    decoder
+        .process(&slip.buffer)
+        .expect("Failed to decode slip to command");
+}
+
 impl M8Command {
     /// From a byte slice, and the current set colour.
     fn from_bytes_with_context(
         buf: &[u8],
-        current_colour: &mut Colour,
+        current_colour: &mut Color,
     ) -> Result<Self, M8CommandError> {
+        // FIXME The current issue is that it is actually possible to get
+        // a partial command come from the serial port. So maybe it is actually
+        // better to keep everything in the slip buffer, since it actually handles
+        // partial commands naturally.
+        info!("Command Buffer: {:?}", buf);
         let len = buf.len();
         let command_type = buf[0];
         match command_type {
@@ -88,13 +108,8 @@ impl M8Command {
                 if len < 4 || len > 484 {
                     Err(M8CommandError::InvalidCommand)
                 } else {
-                    let colour = Colour {
-                        r: buf[1],
-                        g: buf[2],
-                        b: buf[3],
-                    };
                     Ok(M8Command::DrawOscilloscopeWaveform {
-                        colour,
+                        colour: u8_slice_to_color(&buf[1..=3]),
                         waveform: buf[4..].to_vec(),
                     })
                 }
@@ -109,16 +124,8 @@ impl M8Command {
                             x: u16::from_le_bytes([buf[2], buf[3]]),
                             y: u16::from_le_bytes([buf[4], buf[5]]),
                         },
-                        foreground: Colour {
-                            r: buf[6],
-                            g: buf[7],
-                            b: buf[8],
-                        },
-                        background: Colour {
-                            r: buf[9],
-                            g: buf[10],
-                            b: buf[11],
-                        },
+                        foreground: u8_slice_to_color(&buf[6..=8]),
+                        background: u8_slice_to_color(&buf[9..=11]),
                     })
                 }
             }
@@ -135,11 +142,7 @@ impl M8Command {
                     colour: current_colour.clone(),
                 }),
                 8 => {
-                    *current_colour = Colour {
-                        r: buf[5],
-                        g: buf[6],
-                        b: buf[7],
-                    };
+                    *current_colour = u8_slice_to_color(&buf[5..=7]);
                     Ok(M8Command::DrawRectangle {
                         pos: Position {
                             x: u16::from_le_bytes([buf[1], buf[2]]),
@@ -164,11 +167,7 @@ impl M8Command {
                     colour: current_colour.clone(),
                 }),
                 12 => {
-                    *current_colour = Colour {
-                        r: buf[5],
-                        g: buf[6],
-                        b: buf[7],
-                    };
+                    *current_colour = u8_slice_to_color(&buf[5..=7]);
                     Ok(M8Command::DrawRectangle {
                         pos: Position {
                             x: u16::from_le_bytes([buf[1], buf[2]]),
@@ -199,17 +198,17 @@ impl M8Command {
 #[derive(Debug, Resource)]
 pub struct M8CommandDecoder {
     // This is the last used colour used during drawing.
-    current_colour: Colour,
+    current_colour: Color,
 
     // The list of decoded commands in the current cycle.
-    commands: Vec<M8Command>,
+    pub commands: Vec<M8Command>,
 }
 
 impl M8CommandDecoder {
     /// Create a new M8 Command Decoder.
     pub fn new() -> Self {
         Self {
-            current_colour: Colour { r: 0, g: 0, b: 0 },
+            current_colour: Color::Srgba(Srgba::default()),
             commands: Vec::new(),
         }
     }
@@ -231,6 +230,10 @@ pub struct M8CommandDecoderPlugin;
 impl Plugin for M8CommandDecoderPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(M8CommandDecoder::new());
+        app.add_systems(
+            Update,
+            command_decode.in_set(DirtywaveM8UpdateSystems::CommandDecode),
+        );
     }
 }
 
@@ -264,11 +267,11 @@ fn decode_test() {
             40,
             0,
             0,
-            1,
-            2,
             255,
-            254,
-            253,
+            0,
+            255,
+            255,
+            255,
             slip::SLIP_END,
         ])
         .unwrap();
@@ -284,12 +287,12 @@ fn decode_test() {
             assert_eq!(c, &65);
             assert_eq!(pos.x, 20);
             assert_eq!(pos.y, 40);
-            assert_eq!(foreground.r, 0);
-            assert_eq!(foreground.g, 1);
-            assert_eq!(foreground.b, 2);
-            assert_eq!(background.r, 255);
-            assert_eq!(background.g, 254);
-            assert_eq!(background.b, 253);
+            assert_eq!(foreground.to_srgba().red, 0.0);
+            assert_eq!(foreground.to_srgba().green, 1.0);
+            assert_eq!(foreground.to_srgba().blue, 0.0);
+            assert_eq!(background.to_srgba().red, 1.0);
+            assert_eq!(background.to_srgba().green, 1.0);
+            assert_eq!(background.to_srgba().blue, 1.0);
         }
         _ => panic!(),
     }

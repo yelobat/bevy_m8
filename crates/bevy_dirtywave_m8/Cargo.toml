@@ -11,6 +11,9 @@ bevy = { workspace = true, features = [
      "bevy_winit",
      "bevy_render",
      "bevy_camera",
+     "bevy_pbr",
+     "bevy_sprite",
+     "bevy_sprite_render",
 
      # Platform Features
      "wayland",

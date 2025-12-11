@@ -17,20 +17,14 @@ const BAUD_RATE: u32 = 115_200;
 
 /// Represents the connection to the M8.
 #[derive(Resource)]
-struct M8Connection {
+pub struct M8Connection {
     port: Mutex<Box<dyn SerialPort>>,
-    size: usize,
-    buffer: [u8; 1024],
+    pub size: usize,
+    pub buffer: [u8; 1024],
 }
 
-#[derive(Debug, Resource)]
-struct M8SerialReader(Receiver<M8Command>);
-
-#[derive(Debug, Resource)]
-struct M8SerialWriter(Sender<u32>);
-
 #[derive(Debug, Clone)]
-enum M8ConnectionError {
+pub enum M8ConnectionError {
     NoDeviceFound,
     Io(String),
     SerialPort(String),
@@ -38,11 +32,7 @@ enum M8ConnectionError {
 
 fn read(mut connection: ResMut<M8Connection>) {
     match connection.read() {
-        Ok(size) => info!(
-            "M8 Serial Buffer: {:?} has size: {:?}",
-            connection.buffer,
-            connection.size
-        ),
+        Ok(_) => (),
         Err(err) => warn!("M8 Serial Error: {:?}", err),
     }
 }
@@ -54,8 +44,14 @@ pub struct M8SerialPlugin {
 
 impl Plugin for M8SerialPlugin {
     fn build(&self, app: &mut App) {
-        let connection =
+        let mut connection =
             M8Connection::open(self.preferred_device.clone()).expect("Failed to connect to the M8");
+
+        // Enable the M8 Device.
+        connection
+            .send_enable_command()
+            .expect("Failed to send Enable command");
+
         app.insert_resource(connection);
         app.add_systems(Update, read.in_set(DirtywaveM8UpdateSystems::SerialRead));
     }
@@ -72,11 +68,11 @@ impl M8Connection {
         }
     }
 
-    fn send_enable_command(&mut self) -> Result<usize, M8ConnectionError> {
+    pub fn send_enable_command(&mut self) -> Result<usize, M8ConnectionError> {
         self.send(b"E")
     }
 
-    fn send_reset_command(&mut self) -> Result<usize, M8ConnectionError> {
+    pub fn send_reset_command(&mut self) -> Result<usize, M8ConnectionError> {
         self.send(b"R")
     }
 

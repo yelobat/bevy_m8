@@ -2,6 +2,8 @@
 
 use bevy::prelude::*;
 
+use crate::{DirtywaveM8UpdateSystems, serial::M8Connection};
+
 // SLIP Protocol Constants
 pub const SLIP_END: u8 = 0xC0;
 pub const SLIP_ESC: u8 = 0xDB;
@@ -26,9 +28,15 @@ enum State {
 /// SLIP Decoder.
 #[derive(Resource, Debug)]
 pub struct SlipDecoder {
-    buffer: Vec<u8>,
+    pub buffer: Vec<u8>,
     capacity: usize,
     state: State,
+}
+
+fn slip_decode(connection: Res<M8Connection>, mut decoder: ResMut<SlipDecoder>) {
+    decoder
+        .decode(&connection.buffer)
+        .expect("Slip Decoding Failed");
 }
 
 impl SlipDecoder {
@@ -67,12 +75,26 @@ impl SlipDecoder {
     fn decode_byte(&mut self, byte: u8) -> Result<(), SlipError> {
         match self.state {
             State::Normal => match byte {
-                SLIP_END => {
-                    // This is where the current message should actually
-                    // be processed.
-                    self.reset();
-                    Ok(())
-                }
+                // NOTE Might actually keep this around
+                // and keep the entire rendering logic contained
+                // here instead of the current approach.
+                // FIXME Might actually move everything into here
+                // as it is more natural and easier to handle the
+                // command decoding here. At this point, you have
+                // the command inside of the slip buffer. So you
+                // can decode the slip buffer at this point in
+                // time since you know it is a valid command
+                // (should be atleast) and you can then update
+                // the display accordingly. Perhaps this should
+                // actually be moved into as a system rather than
+                // a traditional function, and the organization of
+                // this repository should be made more monolithic.
+                //SLIP_END => {
+                //    // This is where the current message should actually
+                //    // be processed.
+                //    //self.reset();
+                //    Ok(())
+                //}
                 SLIP_ESC => {
                     self.state = State::Escaped;
                     Ok(())
@@ -104,6 +126,10 @@ pub struct M8SlipDecoderPlugin;
 impl Plugin for M8SlipDecoderPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(SlipDecoder::new(1024));
+        app.add_systems(
+            Update,
+            slip_decode.in_set(DirtywaveM8UpdateSystems::SlipDecode),
+        );
     }
 }
 

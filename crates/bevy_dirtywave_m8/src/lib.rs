@@ -1,9 +1,9 @@
 //! Dirtywave M8 accessible from within a bevy app.
 
 mod command;
+mod display;
 mod serial;
 mod slip;
-mod display;
 
 use bevy::prelude::*;
 
@@ -35,7 +35,8 @@ impl Plugin for DirtywaveM8Plugin {
                 DirtywaveM8UpdateSystems::CommandDecode,
                 DirtywaveM8UpdateSystems::DisplayRender,
                 DirtywaveM8UpdateSystems::Update,
-            ),
+            )
+                .chain(),
         );
 
         // Add the Serial Interaction Plugin.
