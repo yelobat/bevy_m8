@@ -5,7 +5,7 @@ use bevy::{
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
 
-use crate::command::{M8Command, M8CommandDecoder, Position, Size};
+use crate::decoder::M8Command;
 
 /// The title used for the Display window.
 const TITLE: &'static str = "Bevy M8";
@@ -20,7 +20,7 @@ const DISPLAY_HEIGHT: f32 = 240.0;
 const DISPLAY_PIXEL_COUNT: usize = (DISPLAY_WIDTH * DISPLAY_HEIGHT) as usize;
 
 #[derive(Debug, Resource)]
-pub struct M8Display(pub Handle<Image>);
+pub struct M8Display(Handle<Image>);
 
 impl M8Display {
     fn process_command(image: &mut Image, command: &M8Command) {
@@ -46,18 +46,6 @@ impl M8Display {
                 patch,
                 font_mode,
             } => (),
-        }
-    }
-
-    pub fn render(
-        display: Res<M8Display>,
-        mut images: ResMut<Assets<Image>>,
-        command_decoder: Res<M8CommandDecoder>,
-    ) {
-        if let Some(image) = images.get_mut(&display.0) {
-            for command in command_decoder.commands.iter() {
-                Self::process_command(image, command);
-            }
         }
     }
 }

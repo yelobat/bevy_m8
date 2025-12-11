@@ -492,15 +492,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bevy_dirtywave_m8"
-version = "0.1.0"
-dependencies = [
- "async-channel",
- "bevy",
- "serialport",
-]
-
-[[package]]
 name = "bevy_ecs"
 version = "0.17.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -729,6 +720,15 @@ dependencies = [
  "tracing-oslog",
  "tracing-subscriber",
  "tracing-wasm",
+]
+
+[[package]]
+name = "bevy_m8"
+version = "0.1.0"
+dependencies = [
+ "async-channel",
+ "bevy",
+ "serialport",
 ]
 
 [[package]]
