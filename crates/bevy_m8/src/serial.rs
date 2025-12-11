@@ -1,11 +1,10 @@
 //! The Dirtywave M8 serialport interaction API.
 
-use async_channel::{Receiver, Sender};
 use bevy::prelude::*;
 use serialport::{SerialPort, SerialPortType};
 use std::sync::Mutex;
 
-use crate::{DirtywaveM8UpdateSystems, command::M8Command};
+use crate::M8UpdateSystems;
 
 /// The maximum amount of bytes to read from the serial device in one pass.
 const SERIAL_READ_SIZE: usize = 1024;
@@ -53,7 +52,7 @@ impl Plugin for M8SerialPlugin {
             .expect("Failed to send Enable command");
 
         app.insert_resource(connection);
-        app.add_systems(Update, read.in_set(DirtywaveM8UpdateSystems::SerialRead));
+        app.add_systems(Update, read.in_set(M8UpdateSystems::SerialRead));
     }
 }
 
