@@ -42,6 +42,7 @@ impl Plugin for M8Plugin {
                 preferred_device: self.0.clone().into(),
             },
             display::M8DisplayPlugin,
+            decoder::M8DecoderPlugin,
         ));
     }
 }
