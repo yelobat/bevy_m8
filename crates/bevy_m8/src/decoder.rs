@@ -42,44 +42,6 @@ impl M8SlipDecoder {
         self.buffer.push(byte);
         self.state = State::Normal;
     }
-
-    pub fn decode(&mut self, stream: &[u8]) -> Result<(), M8DecodeError> {
-        Ok(stream.iter().try_for_each(|chr| self.decode_byte(*chr))?)
-    }
-
-    fn decode_byte(&mut self, byte: u8) -> Result<(), M8DecodeError> {
-        match self.state {
-            State::Normal => match byte {
-                SLIP_END => {
-                    // FIXME Decode this command using the command decoder.
-                    self.reset();
-                    Ok(())
-                }
-                SLIP_ESC => {
-                    self.state = State::Escaped;
-                    Ok(())
-                }
-                _ => {
-                    self.put_byte(byte);
-                    Ok(())
-                }
-            },
-            State::Escaped => match byte {
-                SLIP_ESC_END => {
-                    self.put_byte(SLIP_END);
-                    Ok(())
-                }
-                SLIP_ESC_ESC => {
-                    self.put_byte(SLIP_ESC);
-                    Ok(())
-                }
-                _ => {
-                    self.reset();
-                    return Err(M8DecodeError::UnknownEscapedByte(byte));
-                }
-            },
-        }
-    }
 }
 
 // M8 Command Constants
@@ -169,7 +131,8 @@ impl M8CommandDecoder {
         }
     }
 
-    pub fn clear(&mut self) {
+    /// Reset the Command Buffer's internal state.
+    pub fn reset(&mut self) {
         self.commands.clear();
     }
 
@@ -298,6 +261,7 @@ impl M8Decoder {
     /// Performs the following decoding structure:
     /// Serial -> SLIP Decoder -> Command Decoder
     pub fn decode(&mut self, buf: &[u8]) -> Result<(), M8DecodeError> {
+        self.command_decoder.reset();
         buf.iter().try_for_each(|chr| self.decode_byte(*chr))
     }
 
@@ -339,6 +303,7 @@ impl M8Decoder {
     }
 }
 
+/// The M8 Decoder Plugin for decoding serial data into commands.
 pub struct M8DecoderPlugin;
 impl Plugin for M8DecoderPlugin {
     fn build(&self, app: &mut App) {
@@ -404,7 +369,10 @@ fn decode_test() {
                 })
             },
             M8Command::DrawRectangle {
-                pos: Position { x: 20, y: SLIP_ESC as u16 },
+                pos: Position {
+                    x: 20,
+                    y: SLIP_ESC as u16
+                },
                 size: Size {
                     width: 40,
                     height: 50,
@@ -443,6 +411,24 @@ fn decode_test() {
                 })
             },
         ]
+    );
+
+    decoder.decode(&[0, SLIP_END]).unwrap();
+    assert_eq!(
+        decoder.command_decoder.commands,
+        vec![M8Command::DrawRectangle {
+            pos: Position { x: 40, y: 0 },
+            size: Size {
+                width: 1,
+                height: 1
+            },
+            colour: Color::Srgba(Srgba {
+                red: 1.0,
+                green: 1.0,
+                blue: 1.0,
+                alpha: 1.0
+            })
+        }]
     );
 }
 
