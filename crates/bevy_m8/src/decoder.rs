@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 
+use crate::{M8UpdateSystems, serial::M8Connection};
+
 // SLIP Protocol Constants
 pub const SLIP_END: u8 = 0xC0;
 pub const SLIP_ESC: u8 = 0xDB;
@@ -20,6 +22,7 @@ pub struct M8SlipDecoder {
     state: State,
 }
 
+/// The reserved capacity for the Slip Decoder.
 const SLIP_BUFFER_CAPACITY: usize = 1024;
 
 impl M8SlipDecoder {
@@ -139,6 +142,7 @@ impl M8CommandDecoder {
     /// Processes commands that have been slip decoded.
     pub fn decode(&mut self, buf: &[u8]) -> Result<(), M8DecodeError> {
         let len = buf.len();
+
         let command_type = buf[0];
         let command = match command_type {
             DRAW_OSCILLOSCOPE_WAVEFORM_COMMAND => {
@@ -204,7 +208,7 @@ impl M8CommandDecoder {
                     colour: self.current_colour.clone(),
                 }),
                 12 => {
-                    self.current_colour = u8_slice_to_color(&buf[5..=7]);
+                    self.current_colour = u8_slice_to_color(&buf[9..=11]);
                     Ok(M8Command::DrawRectangle {
                         pos: Position {
                             x: u16::from_le_bytes([buf[1], buf[2]]),
@@ -226,7 +230,7 @@ impl M8CommandDecoder {
                 patch: buf[4],
                 font_mode: buf[5],
             }),
-            _ => Err(M8DecodeError::UnrecognizedCommand),
+            _ => Err(M8DecodeError::UnrecognizedCommand(command_type)),
         }?;
 
         self.commands.push(command);
@@ -236,8 +240,8 @@ impl M8CommandDecoder {
 
 #[derive(Debug, Resource)]
 pub struct M8Decoder {
-    slip_decoder: M8SlipDecoder,
-    command_decoder: M8CommandDecoder,
+    pub slip_decoder: M8SlipDecoder,
+    pub command_decoder: M8CommandDecoder,
 }
 
 #[derive(Debug)]
@@ -246,7 +250,7 @@ pub enum M8DecodeError {
     DrawRectangleInvalidFormat,
     DrawCharacterInvalidFormat,
     DrawOscilloscopeWaveformInvalidFormat,
-    UnrecognizedCommand,
+    UnrecognizedCommand(u8),
 }
 
 impl M8Decoder {
@@ -259,7 +263,7 @@ impl M8Decoder {
     }
 
     /// Performs the following decoding structure:
-    /// Serial -> SLIP Decoder -> Command Decoder
+    /// Serial -> SLIP Decoder -> Command Decoder -> Commands
     pub fn decode(&mut self, buf: &[u8]) -> Result<(), M8DecodeError> {
         self.command_decoder.reset();
         buf.iter().try_for_each(|chr| self.decode_byte(*chr))
@@ -296,11 +300,21 @@ impl M8Decoder {
                 }
                 _ => {
                     self.slip_decoder.reset();
-                    return Err(M8DecodeError::UnknownEscapedByte(byte));
+                    Err(M8DecodeError::UnknownEscapedByte(byte))
                 }
             },
         }
     }
+}
+
+fn decode(connection: Res<M8Connection>, mut decoder: ResMut<M8Decoder>) {
+    match decoder.decode(&connection.buffer[0..connection.size]) {
+        Ok(_) => (),
+        Err(err) => {
+            decoder.slip_decoder.reset();
+            warn!("Failed to decode serial buffer: {err:?}");
+        },
+    };
 }
 
 /// The M8 Decoder Plugin for decoding serial data into commands.
@@ -308,6 +322,7 @@ pub struct M8DecoderPlugin;
 impl Plugin for M8DecoderPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(M8Decoder::new());
+        app.add_systems(Update, decode.in_set(M8UpdateSystems::Decode));
     }
 }
 

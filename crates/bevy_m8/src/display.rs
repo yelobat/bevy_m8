@@ -5,7 +5,11 @@ use bevy::{
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
 
-use crate::decoder::M8Command;
+use crate::{
+    M8UpdateSystems,
+    decoder::{M8Command, M8Decoder},
+    serial::M8Connection,
+};
 
 /// The title used for the Display window.
 const TITLE: &'static str = "Bevy M8";
@@ -14,41 +18,13 @@ const TITLE: &'static str = "Bevy M8";
 const DISPLAY_WIDTH: f32 = 320.0;
 
 /// The Display Height.
-const DISPLAY_HEIGHT: f32 = 240.0;
+const DISPLAY_HEIGHT: f32 = 340.0;
 
 /// The total number of pixels in the Display.
 const DISPLAY_PIXEL_COUNT: usize = (DISPLAY_WIDTH * DISPLAY_HEIGHT) as usize;
 
 #[derive(Debug, Resource)]
 pub struct M8Display(Handle<Image>);
-
-impl M8Display {
-    fn process_command(image: &mut Image, command: &M8Command) {
-        match command {
-            M8Command::DrawRectangle { pos, size, colour } => {
-                for x in pos.x..pos.x + size.width {
-                    for y in pos.y..pos.y + size.height {
-                        image.set_color_at(x.into(), y.into(), *colour).unwrap();
-                    }
-                }
-            }
-            M8Command::DrawCharacter {
-                c,
-                pos,
-                foreground,
-                background,
-            } => (),
-            M8Command::DrawOscilloscopeWaveform { colour, waveform } => (),
-            M8Command::SystemInfo {
-                hardware_type,
-                major,
-                minor,
-                patch,
-                font_mode,
-            } => (),
-        }
-    }
-}
 
 fn setup_display(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     commands.insert_resource(ClearColor(Color::Srgba(Srgba {
@@ -76,10 +52,11 @@ fn setup_display(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             depth_or_array_layers: 1,
         },
         TextureDimension::D2,
-        &[0, 0, 0, 255],
+        &[16, 16, 24, 255],
         TextureFormat::Rgba8UnormSrgb,
         RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
     );
+
     image.sampler = ImageSampler::nearest();
 
     let handle = images.add(image);
@@ -89,6 +66,62 @@ fn setup_display(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     });
 
     commands.insert_resource(M8Display(handle.clone()));
+}
+
+fn input(mut connection: ResMut<M8Connection>, input: Res<ButtonInput<KeyCode>>) {
+    if input.just_pressed(KeyCode::KeyR) {
+        match connection.send_reset_command() {
+            Ok(_) => (),
+            Err(err) => warn!("Failed to send Reset Command: {err:?}"),
+        };
+    } else if input.just_pressed(KeyCode::KeyF) {
+        match connection.send(&[b'C', b'\x04']) {
+            Ok(_) => (),
+            Err(err) => warn!("Failed to send Right Key Press: {err:?}"),
+        }
+    } else if input.just_released(KeyCode::KeyF) {
+        match connection.send(&[b'C', b'\x00']) {
+            Ok(_) => (),
+            Err(err) => warn!("Failed to send Right Key Release: {err:?}"),
+        }
+    }
+}
+
+fn render(decoder: Res<M8Decoder>, display: Res<M8Display>, mut images: ResMut<Assets<Image>>) {
+    if let Some(image) = images.get_mut(&display.0) {
+        for command in decoder.command_decoder.commands.iter() {
+            match command {
+                M8Command::DrawRectangle { pos, size, colour } => {
+                    for x in pos.x..pos.x + size.width {
+                        for y in pos.y..pos.y + size.height {
+                            image.set_color_at(x as u32, y as u32, *colour).unwrap();
+                        }
+                    }
+                }
+                M8Command::DrawCharacter {
+                    c,
+                    pos,
+                    foreground,
+                    background,
+                } => {
+                    ()
+                },
+                M8Command::DrawOscilloscopeWaveform { colour, waveform } => {
+                    ()
+                }
+                M8Command::SystemInfo {
+                    hardware_type,
+                    major,
+                    minor,
+                    patch,
+                    font_mode,
+                } => info!(
+                    "Show System Info: HW: {}, Version: {}.{}.{}, {}",
+                    hardware_type, major, minor, patch, font_mode
+                ),
+            }
+        }
+    }
 }
 
 pub struct M8DisplayPlugin;
@@ -105,5 +138,7 @@ impl Plugin for M8DisplayPlugin {
         }));
 
         app.add_systems(Startup, setup_display);
+        app.add_systems(Update, input.in_set(M8UpdateSystems::Input));
+        app.add_systems(Update, render.in_set(M8UpdateSystems::DisplayRender));
     }
 }

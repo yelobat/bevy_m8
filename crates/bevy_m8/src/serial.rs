@@ -1,8 +1,23 @@
 //! The Dirtywave M8 serialport interaction API.
 
+// FIXME This is where all the problems currently lie.
+// Right now the reading from this port is just not producing
+// good data, it times out frequently and it ends up corrupting the
+// stream causing casscading errors, not sure why this is happening.
+//
+// It could be because I'm not using a separate thread that performs
+// the reading from the serial port, but I don't see why I would need
+// this.
+//
+// Should perhaps look at this example:
+// https://github.com/bevyengine/bevy/blob/main/examples/async_tasks/async_channel_pattern.rs
+// checkout into a new branch called async-serial-read-feature
+// and attempt an asynchronous implementation to see if it fixes any issues. Although, I don't
+// see why making it asynchronous will miraculously fix these issues.
+
 use bevy::prelude::*;
 use serialport::{SerialPort, SerialPortType};
-use std::sync::Mutex;
+use std::{sync::Mutex, time::Duration};
 
 use crate::M8UpdateSystems;
 
@@ -19,7 +34,7 @@ const BAUD_RATE: u32 = 115_200;
 pub struct M8Connection {
     port: Mutex<Box<dyn SerialPort>>,
     pub size: usize,
-    pub buffer: [u8; 1024],
+    pub buffer: [u8; SERIAL_READ_SIZE],
 }
 
 #[derive(Debug, Clone)]
@@ -29,7 +44,19 @@ pub enum M8ConnectionError {
     SerialPort(String),
 }
 
-fn read(mut connection: ResMut<M8Connection>) {
+#[derive(Resource)]
+struct M8SerialTimer(Timer);
+
+fn setup_serial_timer(mut commands: Commands) {
+    let timer = Timer::new(Duration::from_millis(4), TimerMode::Repeating);
+    commands.insert_resource(M8SerialTimer(timer));
+}
+
+fn read(
+    mut connection: ResMut<M8Connection>,
+    time: Res<Time>,
+    mut timer: ResMut<M8SerialTimer>,
+) {
     match connection.read() {
         Ok(_) => (),
         Err(err) => warn!("M8 Serial Error: {:?}", err),
@@ -52,6 +79,7 @@ impl Plugin for M8SerialPlugin {
             .expect("Failed to send Enable command");
 
         app.insert_resource(connection);
+        app.add_systems(Startup, setup_serial_timer);
         app.add_systems(Update, read.in_set(M8UpdateSystems::SerialRead));
     }
 }
@@ -93,6 +121,11 @@ impl M8Connection {
         info!("Opening M8 Serial Port at {}", port_name);
 
         let port = serialport::new(port_name, BAUD_RATE)
+            .timeout(Duration::ZERO)
+            .parity(serialport::Parity::None)
+            .stop_bits(serialport::StopBits::One)
+            .flow_control(serialport::FlowControl::None)
+            .data_bits(serialport::DataBits::Eight)
             .open()
             .map_err(|e| M8ConnectionError::SerialPort(e.to_string()))?;
 
