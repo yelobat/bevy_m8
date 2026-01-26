@@ -11,9 +11,11 @@ bevy = { workspace = true, features = [
      "bevy_winit",
      "bevy_render",
      "bevy_camera",
+     "bevy_state",
      "bevy_pbr",
      "bevy_sprite",
      "bevy_sprite_render",
+     "png",
 
      # Platform Features
      "wayland",
@@ -25,4 +27,5 @@ bevy = { workspace = true, features = [
      # Debugging
      "bevy_log",
 ]}
-async-channel = { workspace = true }
+bevy_asset_loader = "0.25.0"
+crossbeam-channel = "0.5.15"

@@ -5,8 +5,7 @@ resolver = "2"
 [workspace.dependencies]
 anyhow = "1.0.100"
 serialport = "4.8.1"
-async-channel = "2.5.0"
-bevy = { version = "0.17.3", default-features = false }
+bevy = { version = "0.18.0", default-features = false }
 
 [profile.dev]
 opt-level = 1
