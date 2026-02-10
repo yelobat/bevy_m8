@@ -1,20 +1,5 @@
 //! The Dirtywave M8 serialport interaction API.
 
-// FIXME This is where all the problems currently lie.
-// Right now the reading from this port is just not producing
-// good data, it times out frequently and it ends up corrupting the
-// stream causing casscading errors, not sure why this is happening.
-//
-// It could be because I'm not using a separate thread that performs
-// the reading from the serial port, but I don't see why I would need
-// this.
-//
-// Should perhaps look at this example:
-// https://github.com/bevyengine/bevy/blob/main/examples/async_tasks/async_channel_pattern.rs
-// checkout into a new branch called async-serial-read-feature
-// and attempt an asynchronous implementation to see if it fixes any issues. Although, I don't
-// see why making it asynchronous will miraculously fix these issues.
-
 use bevy::{diagnostic::LogDiagnosticsPlugin, prelude::*};
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use serialport::SerialPortType;
@@ -37,13 +22,15 @@ pub struct M8Connection {
     pub tx: Sender<Vec<u8>>,
 }
 
+/// Errors that may occur when trying to find or connect
+/// to a M8 device.
 #[derive(Debug, Clone)]
 pub enum M8ConnectionError {
     NoDeviceFound,
-    Io(String),
     SerialPort(String),
 }
-
+/// This plugin provides the capabilities required
+/// communicate with the M8 via it's serial port.
 #[derive(Debug, Default)]
 pub struct M8SerialPlugin {
     pub preferred_device: Option<String>,
@@ -54,8 +41,12 @@ impl Plugin for M8SerialPlugin {
         let (to_bevy, from_serial) = unbounded::<M8Command>();
         let (to_serial, from_bevy) = unbounded::<Vec<u8>>();
 
-        let port_name = M8Connection::find_port_name(self.preferred_device.clone())
-            .expect("Could not find M8 Tracker.");
+        let port_name = M8Connection::find_port_name(self.preferred_device.clone()).unwrap_or_else(
+            |e| match e {
+                M8ConnectionError::NoDeviceFound => panic!("No M8 device found!"),
+                M8ConnectionError::SerialPort(s) => panic!("Serial port error: {}", s),
+            },
+        );
 
         thread::spawn(move || {
             let mut port = serialport::new(port_name, BAUD_RATE)
@@ -124,6 +115,7 @@ impl M8Connection {
         if let Some(pref) = preferred
             && ports.iter().any(|p| p.port_name == pref)
         {
+            println!("Returned here!");
             return Ok(pref.to_string());
         }
 
@@ -132,10 +124,12 @@ impl M8Connection {
                 && info.vid == M8_VID
                 && info.pid == M8_PID
             {
+                println!("Returned somewhere here!");
                 return Ok(port.port_name);
             }
         }
 
+        println!("Fuck!");
         Err(M8ConnectionError::NoDeviceFound)
     }
 }

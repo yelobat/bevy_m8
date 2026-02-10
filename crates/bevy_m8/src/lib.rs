@@ -1,12 +1,18 @@
 //! Dirtywave M8 accessible from within a bevy app.
 
 mod assets;
+mod audio;
 mod decoder;
 mod display;
+mod keymap;
+mod remote;
 mod serial;
+mod utils;
 
 use bevy::prelude::*;
+pub use keymap::M8KeyMap;
 
+/// Dirtywave M8 accessible from within a bevy app.
 #[derive(Debug, Default, Clone, Eq, PartialEq, Hash, States)]
 pub enum M8LoadingState {
     #[default]
@@ -27,7 +33,10 @@ impl Plugin for M8Plugin {
                 preferred_device: self.0.clone().into(),
             },
             display::M8DisplayPlugin,
+            remote::M8RemotePlugin::default(),
+            keymap::M8KeyMapPlugin,
             assets::M8AssetsPlugin,
+            audio::M8AudioPlugin,
         ));
     }
 }

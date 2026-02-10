@@ -1,3 +1,4 @@
+//! This file provides SLIP decoding functionality.
 use bevy::{
     color::{Color, Srgba},
     log::warn,

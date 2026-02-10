@@ -1,3 +1,5 @@
+//! This file provides the display for the Dirtywave M8.
+
 use std::ops::Add;
 
 use bevy::{
@@ -13,7 +15,9 @@ use crate::{
     M8LoadingState,
     assets::M8Assets,
     decoder::{M8Command, Position, Size},
+    keymap::M8KeyMap,
     serial::M8Connection,
+    utils::keycode_to_mask,
 };
 
 pub const DISPLAY_WIDTH: u32 = 320;
@@ -22,6 +26,7 @@ pub const DISPLAY_HEIGHT: u32 = 240;
 /// The title used for the Display window.
 const TITLE: &'static str = "Bevy M8";
 
+/// The display which displays the M8.
 #[derive(Resource)]
 pub struct M8Display {
     display: Handle<Image>,
@@ -106,11 +111,7 @@ fn draw_character(
                 .map(|p| p.luminance() > 0.5)
                 .unwrap_or(false);
 
-            let final_colour = if is_on {
-                foreground
-            } else {
-                background
-            };
+            let final_colour = if is_on { foreground } else { background };
 
             let dx = pos.x as u32 + x;
             let dy = pos.y as u32 + y + TEXT_OFFSET_Y as u32;
@@ -196,51 +197,70 @@ fn render(
     }
 }
 
-const M8_EDIT: u8 = 1 << 0;
-const M8_OPTION: u8 = 1 << 1;
-const M8_RIGHT: u8 = 1 << 2;
-const M8_START: u8 = 1 << 3;
-const M8_SELECT: u8 = 1 << 4;
-const M8_DOWN: u8 = 1 << 5;
-const M8_UP: u8 = 1 << 6;
-const M8_LEFT: u8 = 1 << 7;
+pub const M8_EDIT: u8 = 1 << 0;
+pub const M8_OPTION: u8 = 1 << 1;
+pub const M8_RIGHT: u8 = 1 << 2;
+pub const M8_START: u8 = 1 << 3;
+pub const M8_SELECT: u8 = 1 << 4;
+pub const M8_DOWN: u8 = 1 << 5;
+pub const M8_UP: u8 = 1 << 6;
+pub const M8_LEFT: u8 = 1 << 7;
+pub const M8_KEY_COUNT: usize = 8;
 
-fn input(keys: Res<ButtonInput<KeyCode>>, connection: Res<M8Connection>, mut prev_mask: Local<u8>) {
+fn input(
+    keys: Res<ButtonInput<KeyCode>>,
+    key_map: Res<M8KeyMap>,
+    connection: Res<M8Connection>,
+    mut prev_mask: Local<u8>,
+) {
     if keys.just_pressed(KeyCode::KeyE) {
+        info!("Sending Enable");
         let _ = connection.tx.send(vec![b'E']);
     }
 
     if keys.just_pressed(KeyCode::KeyR) {
+        info!("Sending Reset");
         let _ = connection.tx.send(vec![b'R']);
     }
 
-    let mut mask: u8 = 0;
-    if keys.pressed(KeyCode::KeyZ) {
-        mask |= M8_EDIT;
-    }
-    if keys.pressed(KeyCode::KeyX) {
-        mask |= M8_OPTION;
-    }
-    if keys.pressed(KeyCode::KeyF) {
-        mask |= M8_RIGHT;
-    }
-    if keys.pressed(KeyCode::KeyB) {
-        mask |= M8_LEFT;
-    }
-    if keys.pressed(KeyCode::KeyN) {
-        mask |= M8_DOWN;
-    }
-    if keys.pressed(KeyCode::KeyP) {
-        mask |= M8_UP;
-    }
-    if keys.pressed(KeyCode::ControlLeft) {
-        mask |= M8_SELECT;
-    }
-    if keys.pressed(KeyCode::ShiftLeft) {
-        mask |= M8_START;
+    let mut keycodes = Vec::with_capacity(M8_KEY_COUNT);
+
+    if keys.pressed(key_map.edit_keycode()) {
+        keycodes.push(key_map.edit_keycode());
     }
 
+    if keys.pressed(key_map.option_keycode()) {
+        keycodes.push(key_map.option_keycode());
+    }
+
+    if keys.pressed(key_map.right_keycode()) {
+        keycodes.push(key_map.right_keycode());
+    }
+
+    if keys.pressed(key_map.left_keycode()) {
+        keycodes.push(key_map.left_keycode());
+    }
+
+    if keys.pressed(key_map.up_keycode()) {
+        keycodes.push(key_map.up_keycode());
+    }
+
+    if keys.pressed(key_map.down_keycode()) {
+        keycodes.push(key_map.down_keycode());
+    }
+
+    if keys.pressed(key_map.select_keycode()) {
+        keycodes.push(key_map.select_keycode());
+    }
+
+    if keys.pressed(key_map.start_keycode()) {
+        keycodes.push(key_map.start_keycode());
+    }
+
+    let mask = keycode_to_mask(keycodes, &key_map);
+
     if mask != *prev_mask {
+        info!("Sending mask: {:?}", mask);
         let _ = connection.tx.send(vec![b'C', mask]);
         *prev_mask = mask;
     }
